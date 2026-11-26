@@ -1,91 +1,26 @@
-# 🌍 Orbit Live
+# Orbit Live
 
 **Every live TV channel and radio station, in one app.**
 
-Orbit Live is a native Android app (Kotlin, Jetpack Compose, Media3/ExoPlayer) that brings free, publicly available TV channels and radio stations from around the world into a single, modern interface.
+Orbit Live is a native Android application built with Kotlin, Jetpack Compose, Material 3, and Media3/ExoPlayer. It brings free, publicly available live TV channels and radio stations from around the world into a dark, glass-styled interface.
 
----
+## Features
 
-## 📺 Live TV
+- **Live TV (`iptv-org`):** Browse thousands of live TV channels filtered by country (flag chips sorted by channel count), genre, or instant search, with 6-hour HTTP caching and offline stale-cache fallback.
+- **Radio (`radio-browser.info`):** Explore stations worldwide filtered by country, genre, or search query, with client-side mirror load balancing, codec/bitrate metadata, and an animated equalizer.
+- **Player & Zap Mode:** Media3/ExoPlayer playback with vertical swipe-to-zap channel switching, automatic stream failover, manual *Next source* switching, Picture-in-Picture (including automatic PiP on leaving the app during TV playback), fullscreen orientation toggle, auto-hiding controls, and a sleep timer (15, 30, 60, or 90 minutes).
+- **Background Playback:** `MediaSessionService` (`PlaybackService`) keeps radio and TV audio playing in the background with notification and lock-screen media controls.
+- **Discovery & Library:** *Surprise me*, *Auto-surf* (25-second channel hopping), *Continue watching / listening*, on-device Favorites, and last-20 Recents persisted via `SharedPreferences`.
 
-- Browse thousands of live channels sourced from the [iptv-org](https://iptv-org.github.io/) database (the same data that powers TV Garden).
-- **Filter by country**, with flag chips sorted by number of available channels.
-- **Filter by genre**: news, sports, movies, music, kids, documentary, entertainment, and more.
-- **Instant search** across all channel names.
-- Channel logos are cached on-device for fast, smooth scrolling.
-- Smart source ordering favors ~720p streams for smooth playback on mobile networks.
+## Project Structure
 
-## 📻 Radio
+- `app/src/main/java/com/orbit/live/Data.kt` — `Repo` (`iptv-org` + `radio-browser.info` API clients & cache), `Station`/`Country` models, `Prefs`.
+- `app/src/main/java/com/orbit/live/AppVM.kt` — ViewModel managing catalogues, search/filter state, playback queue, failover, auto-surf, sleep timer, and library.
+- `app/src/main/java/com/orbit/live/PlayerHolder.kt` & `PlaybackService.kt` — Shared ExoPlayer instance with custom per-host `Referer`/`User-Agent` header resolution and `MediaSessionService`.
+- `app/src/main/java/com/orbit/live/Screens.kt` & `PlayerScreen.kt` — Jetpack Compose screens (`TvScreen`, `RadioScreen`, `LibraryScreen`, `MiniPlayer`, `BottomBar`, `PlayerScreen`).
+- `app/src/main/java/com/orbit/live/MainActivity.kt`, `OrbitApp.kt`, `Theme.kt` — App initialization, Coil disk/memory image caching, edge-to-edge UI, notification permission, and PiP support.
 
-- Tens of thousands of stations from the community-run [radio-browser.info](https://www.radio-browser.info/) directory.
-- Filter by **country** or **genre** (pop, rock, news, talk, jazz, classical, dance, and more).
-- Search stations by name.
-- Animated equalizer visual in the player.
-- Shows codec and bitrate for each station.
-
-## 🎬 Player
-
-| Feature | Description |
-|---|---|
-| **Zap mode** | Swipe up or down to change channels like a TV remote. |
-| **Auto-failover** | If a stream fails, the next available source for that channel loads automatically. |
-| **Manual source switch** | Tap *Next source* to try an alternate stream yourself. |
-| **Picture-in-Picture** | Keep watching in a floating window while using other apps. Also triggers automatically when you leave the app during TV playback. |
-| **Fullscreen rotation** | One-tap switch between portrait and landscape. |
-| **Auto-hiding controls** | Immersive viewing with tap-to-reveal controls. |
-| **Sleep timer** | Stop playback after 15, 30, 60, or 90 minutes. |
-| **Background audio** | Playback continues with the screen off, with notification and lock-screen controls. |
-
-## ✨ Discovery
-
-- **Surprise me**: jumps to a random channel or station and queues more random picks, so you can keep zapping.
-- **Auto-surf**: automatically hops to a new channel every 25 seconds, perfect for exploring the world hands-free.
-- **Continue watching/listening**: a quick-access row of your recently played channels.
-
-## ❤️ Library
-
-- **Favorites**: tap the heart on any channel or station to pin it.
-- **Recents**: your last 20 played items are remembered.
-- Everything is stored locally on your device. No account or sign-in needed.
-
-## 🎨 Design
-
-- Dark, glass-style interface with violet, cyan, and pink gradients.
-- Edge-to-edge layout with animated bottom navigation.
-- Pulsing **LIVE** badges and a persistent mini-player.
-- Responsive grid that adapts to phone and tablet screens.
-
-## ⚡ Performance and Scalability
-
-- **No backend to overload.** Catalogue data is served from static CDNs and cached on-device for 6 hours.
-- **Offline fallback.** If the network is down, the app uses the last cached catalogue.
-- **Radio load balancing.** Requests rotate across multiple community mirrors.
-- **Lean buffering.** Fast channel start with low memory use.
-- **Lazy rendering.** Large lists load only what's on screen.
-- **Disk and memory image caching** for logos.
-
-## 🔌 Streaming Support
-
-- HLS (`.m3u8`) and DASH (`.mpd`) streams
-- Progressive audio (MP3, AAC) for radio
-- Automatic handling of streams that require custom Referer or User-Agent headers
-- Cross-protocol redirects (HTTP and HTTPS)
-
----
-
-## 🛠 Build the APK on GitHub
-
-1. Create a new GitHub repository and upload the project contents (keep the `.github` folder at the repo root).
-2. Open the **Actions** tab. The *Build APK* workflow runs on push, or click **Run workflow**.
-3. Download the **OrbitLive-APKs** artifact and install `app-release.apk` or `app-debug.apk`.
-
-## ⚠️ Notes
-
-- "Free to air" here means free, publicly available internet streams. Satellite and antenna broadcasts require dedicated hardware.
-- Some streams may be offline or geo-restricted, as is common with public IPTV lists.
-- The release APK is signed with the debug key for easy installation and is not intended for Play Store upload.
-
-## 📚 Data Sources
+## Data Sources
 
 - TV: [iptv-org API](https://iptv-org.github.io/)
 - Radio: [radio-browser.info](https://www.radio-browser.info/)
