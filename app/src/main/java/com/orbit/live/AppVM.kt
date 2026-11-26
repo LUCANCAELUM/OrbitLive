@@ -18,6 +18,7 @@ import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -30,6 +31,7 @@ class AppVM(app: Application) : AndroidViewModel(app) {
     // ---- catalogue ----
     var tv by mutableStateOf<List<Station>>(emptyList())
     var countries by mutableStateOf<Map<String, Country>>(emptyMap())
+    var countryOrder by mutableStateOf<List<String>>(emptyList())
     var loading by mutableStateOf(true)
     var error by mutableStateOf<String?>(null)
 
@@ -45,6 +47,14 @@ class AppVM(app: Application) : AndroidViewModel(app) {
     var radioQuery by mutableStateOf("")
     var radioCountry by mutableStateOf<String?>(null)
     var radioTag by mutableStateOf<String?>(null)
+    var lastRadioFilterKey by mutableStateOf<String?>(null)
+        private set
+
+    var trending by mutableStateOf<List<TrendingStream>>(emptyList())
+    var trendingLoading by mutableStateOf(false)
+    var trendingError by mutableStateOf<String?>(null)
+    var trendingQuery by mutableStateOf("")
+    var trendingCategory by mutableStateOf<String?>(null)
 
     // ---- library ----
     var favs by mutableStateOf(prefs.favs())
@@ -65,6 +75,8 @@ class AppVM(app: Application) : AndroidViewModel(app) {
     private var surfJob: Job? = null
     private var sleepJob: Job? = null
     private var radioJob: Job? = null
+    private var trendingJob: Job? = null
+    private var trendingSearchJob: Job? = null
 
     @Suppress("unused")
     private val controller = MediaController.Builder(
@@ -93,38 +105,127 @@ class AppVM(app: Application) : AndroidViewModel(app) {
                 }
             }
         })
-        loadTv()
-        loadRadio()
+        bootstrap()
     }
 
-    fun loadTv() {
-        loading = true
-        error = null
+    private fun bootstrap() {
+        viewModelScope.launch {
+            val cachedTvD = async { Repo.loadCachedTv() }
+            val cachedTrendingD = async { Repo.loadCachedTrending() }
+
+            val cachedTv = cachedTvD.await()
+            if (cachedTv != null) {
+                tv = cachedTv.stations
+                countries = cachedTv.countries
+                countryOrder = cachedTv.countryOrder
+                loading = false
+            }
+
+            val cachedTrending = cachedTrendingD.await()
+            if (cachedTrending != null) {
+                trending = cachedTrending
+                trendingLoading = false
+            }
+
+            if (cachedTv == null || Repo.isTvCacheStale()) {
+                loadTv(silent = cachedTv != null)
+            }
+            loadTrending(silent = cachedTrending != null)
+        }
+    }
+
+    fun loadTv(silent: Boolean = false) {
+        if (!silent) {
+            loading = true
+            error = null
+        }
         viewModelScope.launch {
             try {
                 val d = Repo.loadTv()
                 tv = d.stations
                 countries = d.countries
+                countryOrder = d.countryOrder
+                error = null
             } catch (e: Exception) {
-                error = e.message ?: "Network error"
+                if (!silent || tv.isEmpty()) {
+                    error = e.message ?: "Network error"
+                }
             }
             loading = false
         }
     }
 
-    fun loadRadio() {
+    fun loadRadio(force: Boolean = false) {
+        val key = "${radioCountry.orEmpty()}|${radioTag.orEmpty()}|${radioQuery.trim()}"
+        if (!force && key == lastRadioFilterKey && radio.isNotEmpty()) return
         radioJob?.cancel()
         radioJob = viewModelScope.launch {
             radioLoading = true
             radioError = null
             try {
                 radio = Repo.loadRadio(radioCountry, radioTag, radioQuery.trim())
+                lastRadioFilterKey = key
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 radioError = e.message ?: "Network error"
             }
             radioLoading = false
+        }
+    }
+
+    fun updateTrendingQuery(query: String) {
+        if (trendingQuery == query) return
+        trendingQuery = query
+        trendingSearchJob?.cancel()
+        val cached = Repo.getTrendingFromMemory(trendingCategory, query)
+        if (cached != null) {
+            trending = cached
+            trendingLoading = false
+            trendingError = null
+            return
+        }
+        trendingSearchJob = viewModelScope.launch {
+            if (query.isNotBlank()) delay(300)
+            loadTrending()
+        }
+    }
+
+    fun toggleTrendingCategory(category: String?) {
+        val next = if (category == null || trendingCategory == category) null else category
+        if (next == trendingCategory && trending.isNotEmpty()) return
+        trendingCategory = next
+        val cached = Repo.getTrendingFromMemory(next, trendingQuery)
+        if (cached != null) {
+            trending = cached
+            trendingLoading = false
+            trendingError = null
+            return
+        }
+        trending = emptyList()
+        loadTrending()
+    }
+
+    fun loadTrending(silent: Boolean = false) {
+        trendingJob?.cancel()
+        val selectedCategory = trendingCategory
+        val currentQuery = trendingQuery.trim()
+        trendingJob = viewModelScope.launch {
+            if (!silent) {
+                trendingLoading = true
+                trendingError = null
+            }
+            try {
+                trending = Repo.loadTrending(selectedCategory, currentQuery)
+                trendingError = null
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                if (!silent || trending.isEmpty()) {
+                    trendingError = e.message ?: "Network error"
+                }
+            }
+            trendingLoading = false
         }
     }
 
@@ -207,7 +308,11 @@ class AppVM(app: Application) : AndroidViewModel(app) {
     }
 
     fun surprise() {
-        val pool = (if (tab == 1) radio else tv).ifEmpty { tv }
+        val pool = when (tab) {
+            1 -> radio
+            2 -> trending.map { it.station }
+            else -> tv
+        }.ifEmpty { tv }
         if (pool.isEmpty()) return
         val l = pool.shuffled().take(300)
         play(l.first(), l)

@@ -50,6 +50,7 @@ import androidx.compose.material.icons.rounded.Radio
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Shuffle
 import androidx.compose.material.icons.rounded.Tv
+import androidx.compose.material.icons.rounded.Whatshot
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -102,6 +103,7 @@ fun Root(vm: AppVM) {
                 when (vm.tab) {
                     0 -> TvScreen(vm)
                     1 -> RadioScreen(vm)
+                    2 -> TrendingScreen(vm)
                     else -> LibraryScreen(vm)
                 }
             }
@@ -336,9 +338,7 @@ private val gridPad = PaddingValues(16.dp, 8.dp, 16.dp, 24.dp)
 
 @Composable
 fun TvScreen(vm: AppVM) {
-    val byCount = remember(vm.tv) {
-        vm.tv.groupingBy { it.country }.eachCount().entries.sortedByDescending { it.value }.map { it.key }
-    }
+    val byCount = vm.countryOrder
     val q = vm.query.trim()
     val list = remember(vm.tv, q, vm.country, vm.category) {
         vm.tv.filter {
@@ -413,7 +413,7 @@ fun TvScreen(vm: AppVM) {
             list.isEmpty() -> full {
                 Text(stringResource(R.string.no_channels_match), Modifier.padding(32.dp), color = Color(0x99FFFFFF))
             }
-            else -> items(list, key = { it.id }) { StationCard(vm, it, list) }
+            else -> items(list, key = { it.id }, contentType = { "station" }) { StationCard(vm, it, list) }
         }
     }
 }
@@ -421,8 +421,11 @@ fun TvScreen(vm: AppVM) {
 @Composable
 fun RadioScreen(vm: AppVM) {
     LaunchedEffect(vm.radioQuery, vm.radioCountry, vm.radioTag) {
-        delay(450)
-        vm.loadRadio()
+        val key = "${vm.radioCountry.orEmpty()}|${vm.radioTag.orEmpty()}|${vm.radioQuery.trim()}"
+        if (key != vm.lastRadioFilterKey || vm.radio.isEmpty()) {
+            if (vm.radioQuery.isNotBlank()) delay(350)
+            vm.loadRadio()
+        }
     }
     val cl = remember(vm.countries) { vm.countries.entries.sortedBy { it.value.name } }
     LazyVerticalGrid(
@@ -468,12 +471,12 @@ fun RadioScreen(vm: AppVM) {
                 Column(Modifier.fillMaxWidth().padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(stringResource(R.string.error_load_stations))
                     Spacer(Modifier.height(8.dp))
-                    Button(onClick = { vm.loadRadio() }, modifier = Modifier.testTag("radio_retry_button")) {
+                    Button(onClick = { vm.loadRadio(force = true) }, modifier = Modifier.testTag("radio_retry_button")) {
                         Text(stringResource(R.string.retry))
                     }
                 }
             }
-            else -> items(vm.radio, key = { it.id }) { StationCard(vm, it, vm.radio) }
+            else -> items(vm.radio, key = { it.id }, contentType = { "station" }) { StationCard(vm, it, vm.radio) }
         }
     }
 }
@@ -497,7 +500,7 @@ fun LibraryScreen(vm: AppVM) {
                 )
             }
         } else {
-            items(vm.favs, key = { it.id }) { StationCard(vm, it, vm.favs) }
+            items(vm.favs, key = { it.id }, contentType = { "station" }) { StationCard(vm, it, vm.favs) }
         }
         if (vm.recents.isNotEmpty()) {
             full {
@@ -508,7 +511,7 @@ fun LibraryScreen(vm: AppVM) {
                     modifier = Modifier.padding(top = 16.dp)
                 )
             }
-            items(vm.recents, key = { "rc" + it.id }) { StationCard(vm, it, vm.recents) }
+            items(vm.recents, key = { "rc" + it.id }, contentType = { "station" }) { StationCard(vm, it, vm.recents) }
         }
     }
 }
@@ -570,7 +573,8 @@ fun BottomBar(vm: AppVM) {
     val tabs = listOf(
         Triple(stringResource(R.string.tab_tv), Icons.Rounded.Tv, "bottom_tab_tv" to 0),
         Triple(stringResource(R.string.tab_radio), Icons.Rounded.Radio, "bottom_tab_radio" to 1),
-        Triple(stringResource(R.string.tab_favorites), Icons.Rounded.Favorite, "bottom_tab_favorites" to 2)
+        Triple(stringResource(R.string.tab_trending), Icons.Rounded.Whatshot, "bottom_tab_trending" to 2),
+        Triple(stringResource(R.string.tab_favorites), Icons.Rounded.Favorite, "bottom_tab_favorites" to 3)
     )
     Row(
         Modifier
@@ -592,7 +596,7 @@ fun BottomBar(vm: AppVM) {
                     )
                     .clickable { vm.tab = i }
                     .testTag(tag)
-                    .padding(horizontal = 18.dp, vertical = 12.dp),
+                    .padding(horizontal = 14.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(ic, contentDescription = l, Modifier.size(22.dp))
